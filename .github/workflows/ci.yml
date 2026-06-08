@@ -8,8 +8,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      # REMOVA TUDO O QUE FOR REFERENTE AO SETUP-JAVA AQUI
+      
       - name: Build with Maven
         run: mvn clean package -f webapp/pom.xml
         
       - name: Deploy to S3
-        run: aws s3 cp webapp/target/webapp-1.0-SNAPSHOT.jar s3://devops-codeartifact-store/ --endpoint-url=http://localhost:4566
+        run: aws s3 cp webapp/target/webapp-1.0-SNAPSHOT.jar s3://devops-codeartifact-store/ --endpoint-url=http://localhost:4566x
