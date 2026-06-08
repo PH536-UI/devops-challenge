@@ -1,0 +1,8 @@
+#!/bin/bash
+if [ "$1" == "start" ]; then
+    echo "Iniciando LocalStack..."
+    docker run -d -p 4566:4566 --name localstack-main localstack/localstack
+elif [ "$1" == "stop" ]; then
+    echo "Parando LocalStack..."
+    docker stop localstack-main && docker rm localstack-main
+fi
