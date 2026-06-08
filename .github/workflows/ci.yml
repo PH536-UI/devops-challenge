@@ -23,4 +23,4 @@ jobs:
       
     - name: Deploy to  S3
       run: |
-        aws s3 cp webapp/target/webapp-1.0-SNAPSHOT.jar s3://devops-codeartifact-store/ --endpoint-url=http://localhost:4566
+        aws s3 cp ls -R  webapp/target/webapp-1.0-SNAPSHOT.jar s3://devops-codeartifact-store/ --endpoint-url=http://localhost:4566
