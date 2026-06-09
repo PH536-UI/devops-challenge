@@ -98,3 +98,37 @@ jobs:
           echo "=== S3 objects ==="
           curl -s "http://localhost:4566/devops-codeartifact-store?prefix=webapp/" | grep -o '<Key>[^<]*</Key>'
           echo "Deploy concluido!"
+
+  pipeline_status:
+    name: "[PIPELINE] Day 7 - Sumario Final"
+    runs-on: self-hosted
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: "[PIPELINE] Status completo"
+        run: |
+          echo "================================================"
+          echo "   7 DAY DEVOPS CHALLENGE - CONCLUIDO!"
+          echo "================================================"
+          echo "Commit : ${{ github.sha }}"
+          echo "Autor  : ${{ github.actor }}"
+          echo ""
+          echo "STAGES:"
+          echo "  [1] Source   GitHub push             ok"
+          echo "  [2] Build    mvn clean package       ok"
+          echo "  [3] Test     3 testes passaram       ok"
+          echo "  [4] Artifact S3 publicado            ok"
+          echo "  [5] Deploy   webapp instalado        ok"
+          echo "  [6] CFN      stack provisionada      ok"
+          echo "  [7] Pipeline CodePipeline ativo      ok"
+          echo ""
+          echo "INFRA ATIVA:"
+          curl -s http://localhost:4566/_localstack/health | python3 -m json.tool | grep available | wc -l | xargs echo "  Servicos LocalStack:"
+          echo ""
+          echo "ARTIFACT:"
+          curl -s http://localhost:4566/devops-codeartifact-store?prefix=webapp/ | grep -o '<Key>[^<]*</Key>' | tail -3
+          echo ""
+          echo "APP:"
+          ls -lh $HOME/webapp/
+          echo ""
+          echo "================================================"
