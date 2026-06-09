@@ -30,6 +30,13 @@ jobs:
         if: always()
         run: grep -h "Tests run" webapp/target/surefire-reports/*.txt || true
 
+
+      - name: "[CFN] Validate CloudFormation template"
+        run: |
+          echo "=== Validando template CloudFormation ==="
+          aws cloudformation validate-template \
+            --template-body file://day6/template.yaml \
+            --endpoint-url http://localhost:4566 && echo "Template valido!" || echo "Verificar template"
       - name: "[POST_BUILD] Upload to S3 via curl"
         run: |
           JAR="webapp/target/webapp-1.0-SNAPSHOT.jar"

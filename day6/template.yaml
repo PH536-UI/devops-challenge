@@ -1,0 +1,121 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DevOps Challenge - Infraestrutura completa como codigo.
+  Substitui todos os recursos dos Days 1-5 em um unico template.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: devops-challenge
+    Description: Nome do projeto
+
+  Environment:
+    Type: String
+    Default: local
+    AllowedValues: [local, dev, prod]
+
+Resources:
+
+  # ── S3: Artifact Store (Day 3) ──────────────────────────────
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-artifacts-cfn"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Day
+          Value: "6"
+
+  # ── IAM Role para EC2 (Days 1, 5) ───────────────────────────
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-ec2-role-cfn"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3ArtifactAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub "${ArtifactBucket.Arn}/*"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${ProjectName}-ec2-profile-cfn"
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # ── IAM Role para CodeDeploy (Day 5) ────────────────────────
+  CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-codedeploy-role-cfn"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ── EC2 Instance (Day 1) ─────────────────────────────────────
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c02fb55956c7d316
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-web-server"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Day
+          Value: "6"
+
+# ── Outputs ──────────────────────────────────────────────────
+Outputs:
+  ArtifactBucketName:
+    Description: Nome do bucket S3 para artifacts
+    Value: !Ref ArtifactBucket
+    Export:
+      Name: !Sub "${ProjectName}-artifact-bucket"
+
+  EC2InstanceId:
+    Description: ID da instancia EC2
+    Value: !Ref WebServerInstance
+    Export:
+      Name: !Sub "${ProjectName}-ec2-instance"
+
+  EC2RoleArn:
+    Description: ARN da IAM Role da EC2
+    Value: !GetAtt EC2InstanceRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}-ec2-role-arn"
+
+  CodeDeployRoleArn:
+    Description: ARN da IAM Role do CodeDeploy
+    Value: !GetAtt CodeDeployRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}-codedeploy-role-arn"
