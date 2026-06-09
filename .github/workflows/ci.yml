@@ -38,7 +38,7 @@ jobs:
           JAR="webapp/target/webapp-1.0-SNAPSHOT.jar"
           aws s3 cp $JAR s3://devops-codeartifact-store/webapp/${TIMESTAMP}-${SHORT_SHA}-webapp.jar --endpoint-url=http://localhost:4566
           aws s3 cp $JAR s3://devops-codeartifact-store/webapp/latest-webapp.jar --endpoint-url=http://localhost:4566
-          echo "Artifacts no S3:"
+          echo "S3 artifacts:"
           aws s3 ls s3://devops-codeartifact-store/webapp/ --endpoint-url=http://localhost:4566
 
   deploy:
@@ -55,32 +55,40 @@ jobs:
 
       - name: "[CODEDEPLOY] AfterInstall - download from S3"
         run: |
-          mkdir -p /opt/webapp/logs
-          aws s3 cp s3://devops-codeartifact-store/webapp/latest-webapp.jar /opt/webapp/webapp-1.0-SNAPSHOT.jar --endpoint-url=http://localhost:4566
+          mkdir -p $HOME/webapp/logs
+          aws s3 cp s3://devops-codeartifact-store/webapp/latest-webapp.jar $HOME/webapp/webapp-1.0-SNAPSHOT.jar --endpoint-url=http://localhost:4566
           echo "Artifact instalado:"
-          ls -lh /opt/webapp/
+          ls -lh $HOME/webapp/
 
       - name: "[CODEDEPLOY] ApplicationStart"
         run: |
-          PID_FILE="/opt/webapp/app.pid"
-          LOG_FILE="/opt/webapp/logs/app.log"
+          PID_FILE="$HOME/webapp/app.pid"
+          LOG_FILE="$HOME/webapp/logs/app.log"
           if [ -f "$PID_FILE" ]; then
             kill $(cat "$PID_FILE") 2>/dev/null || true
+            sleep 1
           fi
-          nohup java -jar /opt/webapp/webapp-1.0-SNAPSHOT.jar > "$LOG_FILE" 2>&1 &
+          nohup java -jar $HOME/webapp/webapp-1.0-SNAPSHOT.jar > "$LOG_FILE" 2>&1 &
           echo $! > "$PID_FILE"
           sleep 2
           echo "App PID: $(cat $PID_FILE)"
+          echo "Log:"
+          tail -5 "$LOG_FILE" || true
 
       - name: "[CODEDEPLOY] ValidateService"
         run: |
-          PID=$(cat /opt/webapp/app.pid 2>/dev/null || echo "")
+          PID=$(cat $HOME/webapp/app.pid 2>/dev/null || echo "")
           if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
             echo "SUCESSO: processo $PID rodando"
           else
-            echo "AVISO: jar nao tem servidor web (archetype quickstart)"
-            echo "Em producao seria Spring Boot com health check HTTP"
+            echo "AVISO: jar nao tem main server (quickstart archetype)"
+            echo "Em producao: Spring Boot com /actuator/health"
           fi
-          echo "=== Artifacts no S3 ==="
+          echo ""
+          echo "=== Artifact instalado ==="
+          ls -lh $HOME/webapp/
+          echo ""
+          echo "=== Historico S3 ==="
           aws s3 ls s3://devops-codeartifact-store/webapp/ --endpoint-url=http://localhost:4566
-          echo "=== Deploy concluido ==="
+          echo ""
+          echo "Deploy concluido com sucesso!"
