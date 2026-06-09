@@ -24,22 +24,32 @@ jobs:
         run: |
           cd webapp
           mvn clean package
-          echo "Artifact gerado:"
           ls -lh target/*.jar
 
       - name: "[BUILD] Test report"
         if: always()
         run: grep -h "Tests run" webapp/target/surefire-reports/*.txt || true
 
-      - name: "[POST_BUILD] Upload to S3"
+      - name: "[POST_BUILD] Upload to S3 via curl"
         run: |
+          JAR="webapp/target/webapp-1.0-SNAPSHOT.jar"
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          JAR="webapp/target/webapp-1.0-SNAPSHOT.jar"
-          aws s3 cp $JAR s3://devops-codeartifact-store/webapp/${TIMESTAMP}-${SHORT_SHA}-webapp.jar --endpoint-url=http://localhost:4566
-          aws s3 cp $JAR s3://devops-codeartifact-store/webapp/latest-webapp.jar --endpoint-url=http://localhost:4566
-          echo "S3 artifacts:"
-          aws s3 ls s3://devops-codeartifact-store/webapp/ --endpoint-url=http://localhost:4566
+
+          # Upload versionado
+          curl -s -X PUT \
+            "http://localhost:4566/devops-codeartifact-store/webapp/${TIMESTAMP}-${SHORT_SHA}-webapp.jar" \
+            --data-binary @$JAR \
+            -H "Content-Type: application/java-archive"
+
+          # Upload latest (usado pelo deploy)
+          curl -s -X PUT \
+            "http://localhost:4566/devops-codeartifact-store/webapp/latest-webapp.jar" \
+            --data-binary @$JAR \
+            -H "Content-Type: application/java-archive"
+
+          echo "Artifacts publicados no S3"
+          curl -s "http://localhost:4566/devops-codeartifact-store?prefix=webapp/" | grep -o '<Key>[^<]*</Key>'
 
   deploy:
     name: "[CD] Deploy to EC2"
@@ -50,45 +60,34 @@ jobs:
       - name: "[CODEDEPLOY] Checkout"
         uses: actions/checkout@v4
 
-      - name: "[CODEDEPLOY] BeforeInstall - stop old app"
+      - name: "[CODEDEPLOY] BeforeInstall"
         run: bash scripts/stop_app.sh
 
       - name: "[CODEDEPLOY] AfterInstall - download from S3"
         run: |
           mkdir -p $HOME/webapp/logs
-          aws s3 cp s3://devops-codeartifact-store/webapp/latest-webapp.jar $HOME/webapp/webapp-1.0-SNAPSHOT.jar --endpoint-url=http://localhost:4566
-          echo "Artifact instalado:"
+          curl -s -o $HOME/webapp/webapp-1.0-SNAPSHOT.jar \
+            "http://localhost:4566/devops-codeartifact-store/webapp/latest-webapp.jar"
           ls -lh $HOME/webapp/
 
       - name: "[CODEDEPLOY] ApplicationStart"
         run: |
           PID_FILE="$HOME/webapp/app.pid"
           LOG_FILE="$HOME/webapp/logs/app.log"
-          if [ -f "$PID_FILE" ]; then
-            kill $(cat "$PID_FILE") 2>/dev/null || true
-            sleep 1
-          fi
+          [ -f "$PID_FILE" ] && kill $(cat "$PID_FILE") 2>/dev/null || true
+          sleep 1
           nohup java -jar $HOME/webapp/webapp-1.0-SNAPSHOT.jar > "$LOG_FILE" 2>&1 &
           echo $! > "$PID_FILE"
           sleep 2
           echo "App PID: $(cat $PID_FILE)"
-          echo "Log:"
           tail -5 "$LOG_FILE" || true
 
       - name: "[CODEDEPLOY] ValidateService"
         run: |
           PID=$(cat $HOME/webapp/app.pid 2>/dev/null || echo "")
-          if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-            echo "SUCESSO: processo $PID rodando"
-          else
-            echo "AVISO: jar nao tem main server (quickstart archetype)"
-            echo "Em producao: Spring Boot com /actuator/health"
-          fi
-          echo ""
+          [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null && echo "SUCESSO: PID=$PID rodando" || echo "AVISO: processo encerrou (jar sem servidor web)"
           echo "=== Artifact instalado ==="
           ls -lh $HOME/webapp/
-          echo ""
-          echo "=== Historico S3 ==="
-          aws s3 ls s3://devops-codeartifact-store/webapp/ --endpoint-url=http://localhost:4566
-          echo ""
-          echo "Deploy concluido com sucesso!"
+          echo "=== S3 objects ==="
+          curl -s "http://localhost:4566/devops-codeartifact-store?prefix=webapp/" | grep -o '<Key>[^<]*</Key>'
+          echo "Deploy concluido!"
