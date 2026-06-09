@@ -1,15 +1,70 @@
-name: Java CI
+name: CI Pipeline (CodeBuild local)
 
-on: [push]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
+    name: Build & Test
     runs-on: self-hosted
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Build with Maven
-        run: mvn clean package -f webapp/pom.xml
-        
-      - name: Deploy to S3
-        run: aws s3 cp webapp/target/webapp-1.0-SNAPSHOT.jar s3://devops-codeartifact-store/ --endpoint-url=http://localhost:4566
+      - name: "[SOURCE] Checkout"
+        uses: actions/checkout@v4
+
+      - name: "[PRE_BUILD] Info"
+        run: |
+          echo "=== PRE_BUILD ==="
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Autor:  ${{ github.actor }}"
+          java -version
+          mvn -version
+
+      - name: "[BUILD] Maven compile + test"
+        run: |
+          echo "=== BUILD ==="
+          cd webapp
+          mvn clean package -Dmaven.test.skip=false
+          echo "Tests OK — artifact gerado:"
+          ls -lh target/*.jar
+
+      - name: "[BUILD] Relatorio de testes"
+        if: always()
+        run: |
+          echo "=== TEST REPORT ==="
+          if [ -d webapp/target/surefire-reports ]; then
+            grep -h "Tests run" webapp/target/surefire-reports/*.txt || true
+          fi
+
+      - name: "[POST_BUILD] Upload artifact versionado"
+        run: |
+          echo "=== POST_BUILD ==="
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          JAR="webapp/target/webapp-1.0-SNAPSHOT.jar"
+
+          # Upload versionado (historico)
+          aws s3 cp $JAR \
+            s3://devops-codeartifact-store/webapp/${TIMESTAMP}-${SHORT_SHA}-webapp.jar \
+            --endpoint-url=http://localhost:4566
+
+          # Upload latest (para o CodeDeploy usar no Dia 5)
+          aws s3 cp $JAR \
+            s3://devops-codeartifact-store/webapp/latest-webapp.jar \
+            --endpoint-url=http://localhost:4566
+
+          echo "Artifacts no S3:"
+          aws s3 ls s3://devops-codeartifact-store/webapp/ \
+            --endpoint-url=http://localhost:4566
+
+      - name: "[STATUS] Pipeline concluido"
+        run: |
+          echo "================================"
+          echo "CI Pipeline finalizado com sucesso!"
+          echo "Commit: ${{ github.sha }}"
+          echo "================================"

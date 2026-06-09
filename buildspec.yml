@@ -1,0 +1,42 @@
+version: 0.2
+
+env:
+  variables:
+    ARTIFACT_BUCKET: "devops-codeartifact-store"
+    APP_NAME: "webapp"
+
+phases:
+  install:
+    runtime-versions:
+      java: corretto17
+    commands:
+      - echo "=== INSTALL phase ==="
+      - java -version
+      - mvn -version
+
+  pre_build:
+    commands:
+      - echo "=== PRE_BUILD phase ==="
+      - echo "Build iniciado em $(date)"
+      - echo "Commit SHA: $CODEBUILD_RESOLVED_SOURCE_VERSION"
+
+  build:
+    commands:
+      - echo "=== BUILD phase ==="
+      - cd webapp
+      - mvn clean package -Dmaven.test.skip=false
+      - echo "Build finalizado com sucesso"
+
+  post_build:
+    commands:
+      - echo "=== POST_BUILD phase ==="
+      - JAR_FILE=$(find webapp/target -name "*.jar" | head -1)
+      - echo "Artifact gerado: $JAR_FILE"
+      - aws s3 cp $JAR_FILE s3://$ARTIFACT_BUCKET/$APP_NAME/$(date +%Y%m%d-%H%M%S)-webapp.jar --endpoint-url=http://localhost:4566
+      - aws s3 cp $JAR_FILE s3://$ARTIFACT_BUCKET/$APP_NAME/latest-webapp.jar --endpoint-url=http://localhost:4566
+      - echo "Artifact publicado no S3"
+
+artifacts:
+  files:
+    - webapp/target/*.jar
+  name: webapp-artifact
