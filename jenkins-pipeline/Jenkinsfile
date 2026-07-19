@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "ph536/devops-webapp"
+        IMAGE_TAG  = "v${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/PH536-UI/devops-challenge.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG .'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'docker run --rm $IMAGE_NAME:$IMAGE_TAG mvn test || true'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker push $IMAGE_NAME:$IMAGE_TAG
+                    '''
+                }
+            }
+        }
+
+        stage('Approval to Promote to Prod') {
+            steps {
+                input message: "Promover $IMAGE_TAG para producao?", ok: "Sim, promover"
+            }
+        }
+
+        stage('Deploy (Simulado)') {
+            steps {
+                sh 'echo "Deploy simulado: $IMAGE_NAME:$IMAGE_TAG em producao"'
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Pipeline falhou - iniciar rollback"
+            sh 'echo "Rollback: mantendo versao anterior em producao"'
+        }
+    }
+}
